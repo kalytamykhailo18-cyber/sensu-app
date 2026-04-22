@@ -30,7 +30,8 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-const { width: W, height: H } = Dimensions.get('window');
+const { width: _W, height: H } = Dimensions.get('window');
+const W = Platform.OS === 'web' ? Math.min(_W, 480) : _W;
 
 const SPRING  = { damping: 18, stiffness: 200 };
 const EASE    = { duration: 420, easing: Easing.out(Easing.cubic) };
@@ -326,8 +327,9 @@ export default function LandingScreen() {
   };
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, Platform.OS === 'web' && { alignItems: 'center', backgroundColor: '#111' }]}>
       <Animated.ScrollView
+        style={Platform.OS === 'web' ? { maxWidth: 480, width: '100%' } : undefined}
         onScroll={scrollHandler}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
@@ -855,7 +857,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: 8,
   },
   featureCard: {
-    width: (W - 62) / 2,
+    width: '47%',
     backgroundColor: '#FFF',
     borderRadius: 20,
     borderWidth: 1, borderColor: BRAND.border,
@@ -935,7 +937,7 @@ const styles = StyleSheet.create({
   // ── Testimonials ──────────────────────────────────────────────────────────────
   testimonialsScroll: { paddingHorizontal: 24, gap: 16, paddingBottom: 8 },
   testimonialCard: {
-    width: W * 0.78,
+    width: Math.min(W * 0.78, 360),
     backgroundColor: '#FFF',
     borderRadius: 20,
     padding: 22,

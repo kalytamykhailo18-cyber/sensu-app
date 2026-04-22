@@ -2,19 +2,17 @@ import { CommonColors, CommonStyles } from '@/components/CommonStyles';
 import Header from '@/components/header';
 import {
   Card,
-  LoadingState,
   SectionHeader,
   StatusBadge
 } from '@/components/shared';
 import { ThemedText } from '@/components/ThemedText';
 import { useWatchConfig } from '@/contexts/WatchConfigContext';
 import { useGeofences } from '@/hooks/useDeviceConfig';
-import { useScreenData } from '@/hooks/shared';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { DeviceLocation, useMaps } from '@/hooks/useMaps';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useMemo, useRef, useCallback, useState, useEffect } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -22,7 +20,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const SPRING = { damping: 18, stiffness: 200 };
 const EASE   = { duration: 380 };
@@ -64,17 +62,13 @@ function AnimatedDeviceRow({
 
 export default function UbicacionScreen() {
   const {
-    mapProvider,
     initialRegion,
     currentRegion,
-    isLoading,
     deviceLocations,
     hasAnyDevice,
   } = useMaps();
   const { watchImei: deviceId } = useWatchConfig();
-  const insets = useSafeAreaInsets();
   const theme = useAppTheme();
-  const { dimensions } = useScreenData();
   const { geofences, refresh: refreshGeofences } = useGeofences(deviceId || null);
 
   const params = useLocalSearchParams<{ alertLat?: string; alertLng?: string; alertType?: string }>();
@@ -107,7 +101,6 @@ export default function UbicacionScreen() {
     if (currentRegion) setMapRegion(currentRegion);
   }, [currentRegion]);
 
-  // Load MapLibre GL JS from CDN once
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if ((window as any).maplibregl) { setMapLibreReady(true); return; }
@@ -128,7 +121,6 @@ export default function UbicacionScreen() {
     }
   }, []);
 
-  // Initialize the map once MapLibre is ready
   useEffect(() => {
     if (!mapLibreReady || !mapContainerRef.current || mapInstanceRef.current) return;
     const ml = (window as any).maplibregl;
@@ -148,7 +140,6 @@ export default function UbicacionScreen() {
     return () => { map.remove(); mapInstanceRef.current = null; };
   }, [mapLibreReady]);
 
-  // Fly to new center when device location updates
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
@@ -156,7 +147,6 @@ export default function UbicacionScreen() {
     map.setCenter([center.longitude, center.latitude]);
   }, [mapRegion]);
 
-  // Rebuild markers whenever device list or alert changes
   useEffect(() => {
     const map = mapInstanceRef.current;
     const ml = (window as any).maplibregl;
@@ -209,50 +199,52 @@ export default function UbicacionScreen() {
     }
   }, [deviceLocations, alertMarker, mapLibreReady]);
 
+  // ── Entrance animations ──────────────────────────────────────────────────
   const headerOp = useSharedValue(0); const headerY = useSharedValue(-16);
   const secHOp   = useSharedValue(0); const secHY   = useSharedValue(18);
-  const mapOp    = useSharedValue(0); const mapS    = useSharedValue(0.96);
   const listOp   = useSharedValue(0); const listY   = useSharedValue(16);
   const btnOp    = useSharedValue(0); const btnS    = useSharedValue(0.94);
+  const mapOp    = useSharedValue(0); const mapS    = useSharedValue(0.97);
 
   useEffect(() => {
     headerOp.value = withDelay(0,   withTiming(1, EASE));
     headerY.value  = withDelay(0,   withTiming(0, EASE));
     secHOp.value   = withDelay(80,  withTiming(1, EASE));
     secHY.value    = withDelay(80,  withTiming(0, EASE));
-    mapOp.value    = withDelay(180, withTiming(1, EASE));
-    mapS.value     = withDelay(180, withSpring(1, SPRING));
-    listOp.value   = withDelay(320, withTiming(1, EASE));
-    listY.value    = withDelay(320, withTiming(0, EASE));
-    btnOp.value    = withDelay(420, withTiming(1, EASE));
-    btnS.value     = withDelay(420, withSpring(1, SPRING));
+    listOp.value   = withDelay(160, withTiming(1, EASE));
+    listY.value    = withDelay(160, withTiming(0, EASE));
+    btnOp.value    = withDelay(240, withTiming(1, EASE));
+    btnS.value     = withDelay(240, withSpring(1, SPRING));
+    mapOp.value    = withDelay(320, withTiming(1, EASE));
+    mapS.value     = withDelay(320, withSpring(1, SPRING));
+
+    // On web, snap Y values to avoid interpolation glitch
+    if (typeof window !== 'undefined') {
+      [headerY, secHY, listY].forEach(v => { v.value = 0; });
+    }
   }, []);
 
   const headerStyle = useAnimatedStyle(() => ({ opacity: headerOp.value, transform: [{ translateY: headerY.value }] }));
   const secHStyle   = useAnimatedStyle(() => ({ opacity: secHOp.value,   transform: [{ translateY: secHY.value }] }));
-  const mapStyle    = useAnimatedStyle(() => ({ opacity: mapOp.value,    transform: [{ scale: mapS.value }] }));
   const listStyle   = useAnimatedStyle(() => ({ opacity: listOp.value,   transform: [{ translateY: listY.value }] }));
   const btnStyle    = useAnimatedStyle(() => ({ opacity: btnOp.value,    transform: [{ scale: btnS.value }] }));
+  const mapStyle    = useAnimatedStyle(() => ({ opacity: mapOp.value,    transform: [{ scale: mapS.value }] }));
   const btnPs       = useSharedValue(1);
   const btnPressStyle = useAnimatedStyle(() => ({ transform: [{ scale: btnPs.value }] }));
 
   const styles = useMemo(() => StyleSheet.create({
-    container: { flex: 1, backgroundColor: theme.colors.background, width: '100%', borderLeftWidth: 4, borderLeftColor: theme.colors.secondary },
-    mapContainer: {
-      height: 500,
-      marginHorizontal: 16,
-      marginTop: 12,
-      borderRadius: 12,
-      overflow: 'hidden',
-      position: 'relative',
-      backgroundColor: CommonColors.mapContainerBg,
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+      width: '100%',
+      borderLeftWidth: 4,
+      borderLeftColor: theme.colors.secondary,
     },
+    topContent: { paddingBottom: 4 },
     deviceCard: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: 'row', alignItems: 'center',
       paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.colors.border,
+      borderBottomWidth: 1, borderBottomColor: theme.colors.border,
     },
     deviceCardLast: { borderBottomWidth: 0 },
     deviceIcon: {
@@ -263,24 +255,31 @@ export default function UbicacionScreen() {
     deviceName: { fontSize: 15, fontWeight: '600', color: theme.colors.text },
     deviceDetails: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
     geofenceBtn: {
-      marginHorizontal: 20, marginTop: 12,
+      marginHorizontal: 20, marginBottom: 8,
       backgroundColor: theme.colors.primary,
-      borderRadius: 10, paddingVertical: 14, alignItems: 'center',
+      borderRadius: 10, paddingVertical: 13, alignItems: 'center',
+    },
+    mapWrapper: {
+      flex: 1,
+      marginHorizontal: 16,
+      marginBottom: 12,
+      borderRadius: 12,
+      overflow: 'hidden',
+      backgroundColor: CommonColors.mapContainerBg,
     },
   }), [theme]);
 
-
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right", "bottom"]}>
+
+      {/* Header */}
       <Animated.View style={headerStyle}>
         <Header />
       </Animated.View>
 
-      <ScrollView
-        style={[CommonStyles.tabScrollView, { height: dimensions.height - 200 }]}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={CommonStyles.tabScrollViewContentAndroid}
-      >
+      {/* ── All text/buttons ABOVE the map ── */}
+      <View style={styles.topContent}>
+
         <Animated.View style={secHStyle}>
           <SectionHeader
             title="Ubicación de Dispositivos"
@@ -299,7 +298,7 @@ export default function UbicacionScreen() {
         </Animated.View>
 
         {!hasConfiguredDevice && (
-          <Card variant="filled" padding="medium" style={{ marginHorizontal: 20, marginBottom: 16 }}>
+          <Card variant="filled" padding="medium" style={{ marginHorizontal: 20, marginBottom: 8 }}>
             <ThemedText type="subtitle" style={CommonStyles.subtitle}>
               Sin Dispositivos Configurados
             </ThemedText>
@@ -311,10 +310,8 @@ export default function UbicacionScreen() {
               style={{
                 marginTop: 12,
                 backgroundColor: theme.colors.primary,
-                borderRadius: 8,
-                paddingVertical: 12,
-                paddingHorizontal: 16,
-                alignItems: 'center',
+                borderRadius: 8, paddingVertical: 12,
+                paddingHorizontal: 16, alignItems: 'center',
               }}
             >
               <ThemedText style={{ color: theme.colors.white, fontWeight: '600' }}>
@@ -324,49 +321,47 @@ export default function UbicacionScreen() {
           </Card>
         )}
 
-        {hasConfiguredDevice && (
-          <>
-            <Animated.View style={[styles.mapContainer, mapStyle]}>
-              {/* @ts-ignore */}
-              <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
-            </Animated.View>
-
-            {hasAnyDevice && (
-              <Animated.View style={listStyle}>
-                <Card variant="filled" padding="medium">
-                  <ThemedText type="subtitle" style={CommonStyles.subtitle}>
-                    Dispositivos ({deviceLocations.length})
-                  </ThemedText>
-                  {deviceLocations.map((device, index) => (
-                    <AnimatedDeviceRow
-                      key={device.id}
-                      device={device}
-                      index={index}
-                      isLast={index === deviceLocations.length - 1}
-                      styles={styles}
-                    />
-                  ))}
-                </Card>
-              </Animated.View>
-            )}
-
-            {deviceId && geofences.length < 4 && (
-              <Animated.View style={[btnStyle, btnPressStyle]}>
-                <Pressable
-                  style={styles.geofenceBtn}
-                  onPress={() => router.push('/geofence-editor')}
-                  onPressIn={() =>  { btnPs.value = withSpring(0.96, SPRING); }}
-                  onPressOut={() => { btnPs.value = withSpring(1.00, SPRING); }}
-                >
-                  <ThemedText style={{ color: '#FFF', fontWeight: '700', fontSize: 15 }}>
-                    + Crear Geocerca
-                  </ThemedText>
-                </Pressable>
-              </Animated.View>
-            )}
-          </>
+        {hasAnyDevice && (
+          <Animated.View style={listStyle}>
+            <Card variant="filled" padding="medium">
+              <ThemedText type="subtitle" style={CommonStyles.subtitle}>
+                Dispositivos ({deviceLocations.length})
+              </ThemedText>
+              {deviceLocations.map((device, index) => (
+                <AnimatedDeviceRow
+                  key={device.id}
+                  device={device}
+                  index={index}
+                  isLast={index === deviceLocations.length - 1}
+                  styles={styles}
+                />
+              ))}
+            </Card>
+          </Animated.View>
         )}
-      </ScrollView>
+
+        {deviceId && geofences.length < 4 && (
+          <Animated.View style={[btnStyle, btnPressStyle]}>
+            <Pressable
+              style={styles.geofenceBtn}
+              onPress={() => router.push('/geofence-editor')}
+              onPressIn={() =>  { btnPs.value = withSpring(0.96, SPRING); }}
+              onPressOut={() => { btnPs.value = withSpring(1.00, SPRING); }}
+            >
+              <ThemedText style={{ color: '#FFF', fontWeight: '700', fontSize: 15 }}>
+                + Crear Geocerca
+              </ThemedText>
+            </Pressable>
+          </Animated.View>
+        )}
+      </View>
+
+      {/* ── Map fills remaining screen ── */}
+      <Animated.View style={[styles.mapWrapper, mapStyle]}>
+        {/* @ts-ignore */}
+        <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
+      </Animated.View>
+
     </SafeAreaView>
   );
 }

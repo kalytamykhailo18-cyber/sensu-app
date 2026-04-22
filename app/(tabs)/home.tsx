@@ -1,6 +1,6 @@
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   interpolate,
@@ -146,6 +146,7 @@ export default function HomeScreen() {
   const sosStyle     = useAnimatedStyle(() => ({ transform: [{ scale: sosGlow.value }] }));
 
   const isNarrow = dimensions.width < 480;
+  const [batteryContainerWidth, setBatteryContainerWidth] = useState(0);
 
   // ── Styles ─────────────────────────────────────────────────────────────────
   const styles = useMemo(() => {
@@ -248,16 +249,19 @@ export default function HomeScreen() {
 
           {/* Actions row — battery left (flex:1), SOS always right */}
           <View style={styles.heroActions}>
-            {deviceId ? (
-              <BatteryGauge
-                level={batteryLevel}
-                charging={isCharging}
-                width={dimensions.width - (isNarrow ? 148 : 120)}
-                height={isNarrow ? 32 : 28}
-              />
-            ) : (
-              <View style={{ flex: 1 }} />
-            )}
+            <View
+              style={{ flex: 1 }}
+              onLayout={e => setBatteryContainerWidth(e.nativeEvent.layout.width)}
+            >
+              {deviceId && batteryContainerWidth > 0 && (
+                <BatteryGauge
+                  level={batteryLevel}
+                  charging={isCharging}
+                  width={batteryContainerWidth}
+                  height={isNarrow ? 32 : 28}
+                />
+              )}
+            </View>
             <Animated.View style={sosStyle}>
               <Button
                 title="SOS"
