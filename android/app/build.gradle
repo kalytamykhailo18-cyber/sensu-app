@@ -97,10 +97,19 @@ android {
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
 
-        def localProps = new Properties()
-        def localPropsFile = rootProject.file('local.properties')
-        if (localPropsFile.exists()) { localProps.load(new FileInputStream(localPropsFile)) }
-        manifestPlaceholders = [googleMapsApiKey: localProps.getProperty('GOOGLE_MAPS_API_KEY', '')]
+        def envProps = new Properties()
+        def envFile = new File(rootDir.getAbsoluteFile().getParentFile().getParentFile(), '.env')
+        if (envFile.exists()) {
+            envFile.eachLine { line ->
+                if (line && !line.startsWith('#')) {
+                    def parts = line.split('=', 2)
+                    if (parts.length == 2) {
+                        envProps[parts[0].trim()] = parts[1].trim().replaceAll(/^['"]|['"]$/, '')
+                    }
+                }
+            }
+        }
+        manifestPlaceholders = [googleMapsApiKey: envProps.getProperty('API_KEY_GMAPS', '')]
     }
     signingConfigs {
         debug {
