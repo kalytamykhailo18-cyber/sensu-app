@@ -3,8 +3,8 @@ import { SectionHeader } from '@/components/shared/SectionHeader';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useCallback, useRef } from 'react';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import React, { useCallback, useRef, useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Region } from 'react-native-maps';
 import { WebView } from 'react-native-webview';
 
@@ -16,7 +16,20 @@ interface LocationSectionProps {
   isConnected: boolean;
 }
 
-function buildMapLibreHtml(center: { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number }, markerLat?: number, markerLng?: number) {
+const STREET_STYLE_URL = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json';
+const SAT_STYLE = JSON.stringify({
+  version: 8,
+  sources: { sat: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256 } },
+  layers: [{ id: 'sat', type: 'raster', source: 'sat' }],
+});
+
+function buildMapLibreHtml(
+  center: { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number },
+  markerLat?: number,
+  markerLng?: number,
+  satellite = false,
+) {
+  const style = satellite ? SAT_STYLE : `'${STREET_STYLE_URL}'`;
   const markerJs = (markerLat != null && markerLng != null)
     ? `new maplibregl.Marker({color:'#10B981'}).setLngLat([${markerLng},${markerLat}]).addTo(map);`
     : '';
@@ -26,7 +39,7 @@ function buildMapLibreHtml(center: { latitude: number; longitude: number; latitu
 <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
 <style>body,html,#map{margin:0;padding:0;width:100%;height:100%;overflow:hidden}</style></head>
 <body><div id="map"></div><script>
-var map=new maplibregl.Map({container:'map',style:'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',center:[${center.longitude},${center.latitude}],zoom:14,attributionControl:false});
+var map=new maplibregl.Map({container:'map',style:${style},center:[${center.longitude},${center.latitude}],zoom:14,attributionControl:false});
 ${markerJs}
 </script></body></html>`;
 }
@@ -40,6 +53,7 @@ export const LocationSection = React.memo(function LocationSection({
 }: LocationSectionProps) {
   const theme = useAppTheme();
   const mapRef = useRef<MapView>(null);
+  const [isSatellite, setIsSatellite] = useState(false);
 
   const handleCenterOnDevice = useCallback(() => {
     if (!currentRegion || !mapRef.current) return;
@@ -94,6 +108,22 @@ export const LocationSection = React.memo(function LocationSection({
         />
       </Card>
 
+      {/* Satellite toggle row — above the map */}
+      {Platform.OS !== 'web' && (
+        <Pressable
+          style={[satRowStyle.row, { marginHorizontal: 16, marginBottom: 8 }]}
+          onPress={() => setIsSatellite(v => !v)}
+        >
+          <Ionicons name="layers-outline" size={16} color={theme.colors.text} />
+          <Text style={[satRowStyle.label, { color: theme.colors.text }]}>Vista satélite</Text>
+          <View style={[satRowStyle.pill, isSatellite && satRowStyle.pillActive]}>
+            <Text style={[satRowStyle.pillText, isSatellite && satRowStyle.pillTextActive]}>
+              {isSatellite ? 'ON' : 'OFF'}
+            </Text>
+          </View>
+        </Pressable>
+      )}
+
       <Card variant="elevated" padding="none" style={{
         height: 220,
         width: '100%',
@@ -124,14 +154,13 @@ export const LocationSection = React.memo(function LocationSection({
             />
           </View>
         ) : Platform.OS === 'android' ? (
-          // Android: MapLibre GL via WebView — no Google Maps API key needed
           <WebView
-            source={{ html: buildMapLibreHtml(mapCenter, safeCurrentRegion?.latitude, safeCurrentRegion?.longitude) }}
+            key={isSatellite ? 'sat' : 'street'}
+            source={{ html: buildMapLibreHtml(mapCenter, safeCurrentRegion?.latitude, safeCurrentRegion?.longitude, isSatellite) }}
             style={{ width: '100%', height: '100%' }}
             scrollEnabled={false}
           />
         ) : (
-          // iOS: native MapView works reliably
           <>
             <MapView
               ref={mapRef}
@@ -139,16 +168,14 @@ export const LocationSection = React.memo(function LocationSection({
               provider={mapProvider}
               initialRegion={initialRegion}
               region={safeCurrentRegion}
+              mapType={isSatellite ? 'hybrid' : 'standard'}
               showsUserLocation
               showsMyLocationButton
               loadingEnabled={false}
             >
               {safeCurrentRegion && (
                 <Marker
-                  coordinate={{
-                    latitude: safeCurrentRegion.latitude,
-                    longitude: safeCurrentRegion.longitude,
-                  }}
+                  coordinate={{ latitude: safeCurrentRegion.latitude, longitude: safeCurrentRegion.longitude }}
                   title="Ubicación del Dispositivo"
                   description="Ubicación actual del dispositivo"
                   pinColor="#10B981"
@@ -162,6 +189,7 @@ export const LocationSection = React.memo(function LocationSection({
             )}
           </>
         )}
+
       </Card>
     </>
   );
@@ -184,4 +212,21 @@ const locateStyles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 4,
   },
+});
+
+const satRowStyle = StyleSheet.create({
+  row: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10, paddingVertical: 9, paddingHorizontal: 14,
+    borderWidth: 1, borderColor: '#E5E7EB',
+  },
+  label: { flex: 1, fontSize: 13 },
+  pill: {
+    paddingHorizontal: 10, paddingVertical: 3,
+    borderRadius: 12, backgroundColor: '#E5E7EB',
+  },
+  pillActive: { backgroundColor: '#10B981' },
+  pillText: { fontSize: 12, fontWeight: '700', color: '#6B7280' },
+  pillTextActive: { color: '#fff' },
 });

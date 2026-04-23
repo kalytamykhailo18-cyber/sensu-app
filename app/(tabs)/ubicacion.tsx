@@ -29,6 +29,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 const SPRING = { damping: 18, stiffness: 200 };
 const EASE   = { duration: 380 };
 
+const STREET_STYLE_URL = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json';
+const SAT_STYLE = JSON.stringify({
+  version: 8,
+  sources: { sat: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256 } },
+  layers: [{ id: 'sat', type: 'raster', source: 'sat' }],
+});
+
 function AnimatedDeviceRow({
   device, index, isLast, styles,
 }: {
@@ -101,6 +108,7 @@ export default function UbicacionScreen() {
 
   const mapRef = useRef<MapView>(null);
   const [mapRegion, setMapRegion] = useState<Region | undefined>(currentRegion);
+  const [isSatellite, setIsSatellite] = useState(false);
   const hasConfiguredDevice = !!deviceId || hasAnyDevice;
 
   useEffect(() => {
@@ -217,6 +225,22 @@ export default function UbicacionScreen() {
       shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.15, shadowRadius: 4, elevation: 4,
     },
+    satToggleRow: {
+      flexDirection: 'row', alignItems: 'center', gap: 8,
+      backgroundColor: theme.colors.cardBackground,
+      borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14,
+      borderWidth: 1, borderColor: theme.colors.border,
+    },
+    satToggleLabel: {
+      flex: 1, fontSize: 14, color: theme.colors.text,
+    },
+    satPill: {
+      paddingHorizontal: 10, paddingVertical: 3,
+      borderRadius: 12, backgroundColor: theme.colors.border,
+    },
+    satPillActive: { backgroundColor: '#10B981' },
+    satPillText: { fontSize: 12, fontWeight: '700', color: theme.colors.textSecondary },
+    satPillTextActive: { color: '#fff' },
   }), [theme]);
 
   const getMarkerColor = (device: DeviceLocation) => device.online ? '#10B981' : '#9CA3AF';
@@ -312,6 +336,19 @@ export default function UbicacionScreen() {
         )}
       </View>
 
+      {/* ── Satellite toggle — above the map ── */}
+      <Animated.View style={[btnStyle, { marginHorizontal: 20, marginBottom: 8 }]}>
+        <Pressable style={styles.satToggleRow} onPress={() => setIsSatellite(v => !v)}>
+          <Ionicons name="layers-outline" size={18} color={theme.colors.text} />
+          <ThemedText style={styles.satToggleLabel}>Vista satélite</ThemedText>
+          <View style={[styles.satPill, isSatellite && styles.satPillActive]}>
+            <ThemedText style={[styles.satPillText, isSatellite && styles.satPillTextActive]}>
+              {isSatellite ? 'ON' : 'OFF'}
+            </ThemedText>
+          </View>
+        </Pressable>
+      </Animated.View>
+
       {/* ── Map fills remaining screen — gestures are map-only ── */}
       <Animated.View style={[styles.mapWrapper, mapStyle]}>
         {Platform.OS === 'android' ? (
@@ -325,13 +362,14 @@ export default function UbicacionScreen() {
               })),
               ...(alertMarker ? [{ lng: alertMarker.longitude, lat: alertMarker.latitude, color: '#EF4444', label: '⚠️ Alerta' }] : []),
             ]);
+            const styleVal = isSatellite ? SAT_STYLE : `'${STREET_STYLE_URL}'`;
             const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet"/>
 <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
 <style>body,html,#map{margin:0;padding:0;width:100%;height:100%}</style></head>
 <body><div id="map"></div><script>
-var map=new maplibregl.Map({container:'map',style:'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',center:[${center.longitude},${center.latitude}],zoom:14});
+var map=new maplibregl.Map({container:'map',style:${styleVal},center:[${center.longitude},${center.latitude}],zoom:14});
 map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');
 var markers=${markersJson};
 markers.forEach(function(m){
@@ -341,7 +379,7 @@ markers.forEach(function(m){
   new maplibregl.Marker({element:el}).setLngLat([m.lng,m.lat]).setPopup(new maplibregl.Popup({offset:28,closeButton:false}).setHTML('<div style="font-size:13px;padding:4px">'+m.label+'</div>')).addTo(map);
 });
 </script></body></html>`;
-            return <WebView source={{ html }} style={{ flex: 1 }} />;
+            return <WebView key={isSatellite ? 'sat' : 'street'} source={{ html }} style={{ flex: 1 }} />;
           })()
         ) : (
           <>
@@ -350,6 +388,7 @@ markers.forEach(function(m){
               style={styles.map}
               provider={mapProvider}
               initialRegion={mapRegion || initialRegion}
+              mapType={isSatellite ? 'hybrid' : 'standard'}
               showsUserLocation
               showsMyLocationButton
               loadingEnabled={isLoading}

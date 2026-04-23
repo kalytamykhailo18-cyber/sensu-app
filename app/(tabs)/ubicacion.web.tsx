@@ -11,6 +11,7 @@ import { useGeofences } from '@/hooks/useDeviceConfig';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { DeviceLocation, useMaps } from '@/hooks/useMaps';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useRef, useCallback, useState, useEffect } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
@@ -24,6 +25,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 const SPRING = { damping: 18, stiffness: 200 };
 const EASE   = { duration: 380 };
+
+const STREET_STYLE_URL = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json';
+const SAT_STYLE_OBJ = {
+  version: 8 as const,
+  sources: { sat: { type: 'raster' as const, tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256 } },
+  layers: [{ id: 'sat', type: 'raster' as const, source: 'sat' }],
+};
 
 function AnimatedDeviceRow({
   device, index, isLast, styles,
@@ -94,6 +102,7 @@ export default function UbicacionScreen() {
   const markersRef      = useRef<any[]>([]);
   const [mapRegion, setMapRegion] = useState(currentRegion);
   const [mapLibreReady, setMapLibreReady] = useState(false);
+  const [isSatellite, setIsSatellite] = useState(false);
 
   const hasConfiguredDevice = !!deviceId || hasAnyDevice;
 
@@ -146,6 +155,13 @@ export default function UbicacionScreen() {
     const center = mapRegion || initialRegion;
     map.setCenter([center.longitude, center.latitude]);
   }, [mapRegion]);
+
+  // Swap base map style on satellite toggle
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    map.setStyle(isSatellite ? SAT_STYLE_OBJ : STREET_STYLE_URL);
+  }, [isSatellite]);
 
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -267,6 +283,22 @@ export default function UbicacionScreen() {
       overflow: 'hidden',
       backgroundColor: CommonColors.mapContainerBg,
     },
+    satToggleRow: {
+      flexDirection: 'row', alignItems: 'center', gap: 8,
+      backgroundColor: theme.colors.cardBackground,
+      borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14,
+      borderWidth: 1, borderColor: theme.colors.border,
+    },
+    satToggleLabel: {
+      flex: 1, fontSize: 14, color: theme.colors.text,
+    },
+    satPill: {
+      paddingHorizontal: 10, paddingVertical: 3,
+      borderRadius: 12, backgroundColor: theme.colors.border,
+    },
+    satPillActive: { backgroundColor: '#10B981' },
+    satPillText: { fontSize: 12, fontWeight: '700', color: theme.colors.textSecondary },
+    satPillTextActive: { color: '#fff' },
   }), [theme]);
 
   return (
@@ -340,20 +372,20 @@ export default function UbicacionScreen() {
           </Animated.View>
         )}
 
-        {deviceId && geofences.length < 4 && (
-          <Animated.View style={[btnStyle, btnPressStyle]}>
-            <Pressable
-              style={styles.geofenceBtn}
-              onPress={() => router.push('/geofence-editor')}
-              onPressIn={() =>  { btnPs.value = withSpring(0.96, SPRING); }}
-              onPressOut={() => { btnPs.value = withSpring(1.00, SPRING); }}
-            >
-              <ThemedText style={{ color: '#FFF', fontWeight: '700', fontSize: 15 }}>
-                + Crear Geocerca
+        {/* Geofence creation is native-only — button intentionally hidden on web */}
+
+        {/* Satellite toggle — above the map */}
+        <Animated.View style={[btnStyle, { marginHorizontal: 20, marginBottom: 8 }]}>
+          <Pressable style={styles.satToggleRow} onPress={() => setIsSatellite(v => !v)}>
+            <Ionicons name="layers-outline" size={18} color="#374151" />
+            <ThemedText style={styles.satToggleLabel}>Vista satélite</ThemedText>
+            <View style={[styles.satPill, isSatellite && styles.satPillActive]}>
+              <ThemedText style={[styles.satPillText, isSatellite && styles.satPillTextActive]}>
+                {isSatellite ? 'ON' : 'OFF'}
               </ThemedText>
-            </Pressable>
-          </Animated.View>
-        )}
+            </View>
+          </Pressable>
+        </Animated.View>
       </View>
 
       {/* ── Map fills remaining screen ── */}
